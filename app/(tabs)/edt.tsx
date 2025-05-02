@@ -1,177 +1,353 @@
-// EdtScreen.js
-import React, { useState } from "react";
+// EdtScreen.tsx
+import React, { useState, useEffect } from "react";
 import {
   View,
   Text,
   StyleSheet,
   TouchableOpacity,
   ScrollView,
+  Alert,
+  ActivityIndicator,
+  Modal,
+  Pressable,
 } from "react-native";
+import {
+  getCoursByEdt,
+  updateCoursStatus,
+  updateProfDisponibility,
+} from "@/services/CoursService";
+import { getPublishedEdts } from "@/services/EdtService";
+import { Cours, EStatutCours, EDisponibiliteProf, Edt } from "@/interfaces/EDT";
+import { getFilieres } from "@/services/FiliereService";
+import { getModules } from "@/services/ModuleService";
+import { getSalles } from "@/services/SalleSercice";
+import { Module, Filiere, Salle } from "@/interfaces/Shared";
 
-// Thème
 const THEME = {
-  background: "#231345", // --background
-  foreground: "#FBFBFB", // --foreground
-  primary: "#8B3DFF", // --primary
-  secondary: "#2D204F", // --secondary
-  muted: "#2D204F", // --muted
-  mutedForeground: "#B4A9D6", // --muted-foreground
-  border: "rgba(255, 255, 255, 0.1)", // --border
-};
-
-// Données simulées pour l'EDT
-const weekdays = ["Lundi", "Mardi", "Mercredi", "Jeudi", "Vendredi"];
-
-const coursesData = {
-  Lundi: [
-    {
-      id: 1,
-      name: "Mathématiques",
-      time: "08:00 - 10:00",
-      room: "Salle 101",
-      professor: "Dr. Dupont",
-    },
-    {
-      id: 2,
-      name: "Physique",
-      time: "10:30 - 12:30",
-      room: "Salle 102",
-      professor: "Dr. Martin",
-    },
-    {
-      id: 3,
-      name: "Anglais",
-      time: "14:00 - 16:00",
-      room: "Salle 103",
-      professor: "Mme. Johnson",
-    },
-  ],
-  Mardi: [
-    {
-      id: 4,
-      name: "Informatique",
-      time: "09:00 - 11:00",
-      room: "Labo 1",
-      professor: "Dr. Lefèvre",
-    },
-    {
-      id: 5,
-      name: "Économie",
-      time: "13:00 - 15:00",
-      room: "Salle 205",
-      professor: "Dr. Dubois",
-    },
-  ],
-  Mercredi: [
-    {
-      id: 6,
-      name: "Gestion",
-      time: "08:00 - 10:00",
-      room: "Amphi A",
-      professor: "Dr. Moreau",
-    },
-    {
-      id: 7,
-      name: "Marketing",
-      time: "10:30 - 12:30",
-      room: "Salle 301",
-      professor: "Mme. Bernard",
-    },
-  ],
-  Jeudi: [
-    {
-      id: 8,
-      name: "Statistiques",
-      time: "10:00 - 12:00",
-      room: "Salle 202",
-      professor: "Dr. Thomas",
-    },
-    {
-      id: 9,
-      name: "Droit",
-      time: "14:00 - 16:00",
-      room: "Salle 303",
-      professor: "Me. Petit",
-    },
-    {
-      id: 10,
-      name: "Communication",
-      time: "16:30 - 18:30",
-      room: "Salle 105",
-      professor: "Dr. Robert",
-    },
-  ],
-  Vendredi: [
-    {
-      id: 11,
-      name: "Projet",
-      time: "09:00 - 12:00",
-      room: "Labo 2",
-      professor: "Dr. Simon",
-    },
-    {
-      id: 12,
-      name: "Chimie",
-      time: "14:00 - 16:00",
-      room: "Labo 3",
-      professor: "Dr. Blanc",
-    },
-  ],
+  background: "#231345",
+  foreground: "#FBFBFB",
+  primary: "#8B3DFF",
+  secondary: "#2D204F",
+  muted: "#2D204F",
+  mutedForeground: "#B4A9D6",
+  border: "rgba(255, 255, 255, 0.1)",
 };
 
 const EdtScreen = () => {
-  const [selectedDay, setSelectedDay] = useState("Lundi");
+  const user = {
+    id: "a26f85aa-0777-47cd-9d3c-f206a8e9c9d6",
+    filiere: "176c879f-2c01-4e71-9019-8d178c8a50d4",
+    filiereId: "MIAGE",
+    role: "DELEGUE", // ou "ENSEIGNANT"
+  };
+  const [selectedDay, setSelectedDay] = useState<string>("");
+  const [cours, setCours] = useState<Cours[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [edts, setEdts] = useState<Edt[]>([]);
+  const [selectedEdt, setSelectedEdt] = useState<Edt | null>(null);
+  const [showEdtPicker, setShowEdtPicker] = useState(false);
+  const [weekDays, setWeekDays] = useState<string[]>([]);
+  const [filieres, setFilieres] = useState<Filiere[]>([]);
+  const [modules, setModules] = useState<Module[]>([]);
+  const [salles, setSalles] = useState<Salle[]>([]);
+
+  useEffect(() => {
+    const fetchPublishedEdts = async () => {
+      try {
+        setLoading(true);
+        const publishedEdts = await getPublishedEdts(user.filiereId);
+        setEdts(publishedEdts);
+
+        if (publishedEdts.length > 0) {
+          // Sélectionner l'EDT courant par défaut
+          handleSelectEdt(publishedEdts[0]);
+        }
+      } catch (error) {
+        Alert.alert("Erreur", "Impossible de charger les emplois du temps");
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchPublishedEdts();
+    const fetchFilieres = async () => {
+      try {
+        const filieresData = await getFilieres();
+        setFilieres(filieresData);
+      } catch (error) {
+        Alert.alert("Erreur", "Impossible de charger les filières");
+      }
+    };
+    const fetchModules = async () => {
+      try {
+        const modulesData = await getModules();
+        setModules(modulesData);
+      } catch (error) {
+        Alert.alert("Erreur", "Impossible de charger les modules");
+      }
+    };
+    const fetchSalles = async () => {
+      try {
+        const sallesData = await getSalles();
+        setSalles(sallesData);
+      } catch (error) {
+        Alert.alert("Erreur", "Impossible de charger les salles");
+      }
+    };
+    fetchFilieres();
+    fetchModules();
+    fetchSalles();
+  }, []);
+
+  const handleSelectEdt = async (edt: Edt) => {
+    try {
+      setLoading(true);
+      setSelectedEdt(edt);
+      setShowEdtPicker(false);
+
+      // Générer les jours de la semaine
+      generateWeekDays(edt.dateDebut, edt.dateFin);
+
+      // Récupérer les cours pour cet EDT
+      const coursData = await getCoursByEdt(edt.id, user.filiereId);
+      setCours(coursData);
+
+      // Sélectionner le jour actuel par défaut
+      setSelectedDay(getCurrentWeekday());
+    } catch (error) {
+      Alert.alert("Erreur", "Impossible de charger les cours");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const generateWeekDays = (startDate: string, endDate: string) => {
+    // Simplification pour l'exemple - dans une vraie app, utilisez les dates réelles
+    const days = ["Lundi", "Mardi", "Mercredi", "Jeudi", "Vendredi"];
+    setWeekDays(days);
+  };
+
+  const getCurrentWeekday = () => {
+    const today = new Date().getDay();
+    const weekdays = [
+      "Dimanche",
+      "Lundi",
+      "Mardi",
+      "Mercredi",
+      "Jeudi",
+      "Vendredi",
+      "Samedi",
+    ];
+    return weekdays[today];
+  };
+
+  const handleMarkAsDone = async (coursId: string) => {
+    try {
+      await updateCoursStatus(coursId);
+      setCours(
+        cours.map((c) => (c.id === coursId ? { ...c, statutCours: "FAIT" } : c))
+      );
+    } catch (error) {
+      Alert.alert("Erreur", "Impossible de mettre à jour le statut du cours");
+    }
+  };
+
+  const handleToggleDisponibility = async (coursId: string) => {
+    try {
+      const coursToUpdate = cours.find((c) => c.id === coursId);
+      if (!coursToUpdate) return;
+
+      const newStatus =
+        coursToUpdate.disponibiliteProf === EDisponibiliteProf.DISPONIBLE
+          ? EDisponibiliteProf.INDISPONIBLE
+          : EDisponibiliteProf.DISPONIBLE;
+
+      await updateProfDisponibility(coursId);
+      setCours(
+        cours.map((c) =>
+          c.id === coursId ? { ...c, disponibiliteProf: newStatus } : c
+        )
+      );
+    } catch (error) {
+      Alert.alert("Erreur", "Impossible de mettre à jour la disponibilité");
+    }
+  };
+
+  const getCoursForDay = (day: string) => {
+    // Dans une vraie implémentation, vous filtreriez par date réelle
+    // Pour l'exemple, nous simulons des données par jour
+    return cours.filter((_, index) => {
+      const dayIndex = weekDays.indexOf(day);
+      return index % weekDays.length === dayIndex;
+    });
+  };
+
+  const formatEdtTitle = (edt: Edt) => {
+    return `Emploi du temps du ${new Date(
+      edt.dateDebut
+    ).toLocaleDateString()} au ${new Date(edt.dateFin).toLocaleDateString()}`;
+  };
+
+  if (loading && !selectedEdt) {
+    return (
+      <View style={[styles.container, styles.loadingContainer]}>
+        <ActivityIndicator size="large" color={THEME.primary} />
+      </View>
+    );
+  }
 
   return (
     <View style={styles.container}>
-      {/* En-tête avec sélection de jour */}
-      <ScrollView
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        style={styles.daySelector}
-        contentContainerStyle={styles.daySelectorContent}
+      {/* Sélecteur d'EDT */}
+      <TouchableOpacity
+        style={styles.edtSelector}
+        onPress={() => setShowEdtPicker(true)}
       >
-        {weekdays.map((day) => (
-          <TouchableOpacity
-            key={day}
-            style={[
-              styles.dayButton,
-              selectedDay === day && styles.selectedDayButton,
-            ]}
-            onPress={() => setSelectedDay(day)}
-          >
-            <Text
-              style={[
-                styles.dayButtonText,
-                selectedDay === day && styles.selectedDayButtonText,
-              ]}
-            >
-              {day}
-            </Text>
-          </TouchableOpacity>
-        ))}
-      </ScrollView>
-
-      {/* Liste des cours pour le jour sélectionné */}
-      <ScrollView style={styles.coursesList}>
-        <Text style={styles.dateHeader}>
-          {selectedDay} {new Date().getDate()}{" "}
-          {new Date().toLocaleDateString("fr-FR", { month: "long" })}
+        <Text style={styles.edtSelectorText}>
+          {selectedEdt
+            ? formatEdtTitle(selectedEdt)
+            : "Choisir un emploi du temps"}
         </Text>
+        <Text style={styles.edtSelectorArrow}>▼</Text>
+      </TouchableOpacity>
 
-        {coursesData[selectedDay].map((course) => (
-          <View key={course.id} style={styles.courseCard}>
-            <View style={styles.courseTime}>
-              <Text style={styles.courseTimeText}>{course.time}</Text>
-            </View>
-            <View style={styles.courseDetails}>
-              <Text style={styles.courseName}>{course.name}</Text>
-              <Text style={styles.courseRoom}>{course.room}</Text>
-              <Text style={styles.courseProfessor}>{course.professor}</Text>
-            </View>
-          </View>
-        ))}
+      {/* Sélecteur de jour */}
+      {selectedEdt && (
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          style={styles.daySelector}
+        >
+          {weekDays.map((day) => (
+            <TouchableOpacity
+              key={day}
+              style={[
+                styles.dayButton,
+                selectedDay === day && styles.selectedDayButton,
+              ]}
+              onPress={() => setSelectedDay(day)}
+            >
+              <Text
+                style={[
+                  styles.dayButtonText,
+                  selectedDay === day && styles.selectedDayButtonText,
+                ]}
+              >
+                {day}
+              </Text>
+            </TouchableOpacity>
+          ))}
+        </ScrollView>
+      )}
+
+      {/* Liste des cours */}
+      <ScrollView style={styles.coursesList}>
+        {selectedEdt && (
+          <>
+            <Text style={styles.dateHeader}>
+              {selectedDay} -{" "}
+              {(filieres.find((f) => f.id === user.filiere) as Filiere)
+                .nomFiliere +
+                " " +
+                (filieres.find((f) => f.id === user.filiere) as Filiere).niveau}
+            </Text>
+
+            {getCoursForDay(selectedDay).map((cours) => (
+              <View key={cours.id} style={styles.courseCard}>
+                <View style={styles.courseTime}>
+                  <Text style={styles.courseTimeText}>{cours.crenau}</Text>
+                </View>
+                <View style={styles.courseDetails}>
+                  <Text style={styles.courseName}>
+                    Intitulé :{" "}
+                    {
+                      (modules.find((m) => m.id === cours.idMatiere) as Module)
+                        .intitule
+                    }
+                  </Text>
+                  <Text style={styles.courseRoom}>
+                    Salle :{" "}
+                    {
+                      (salles.find((s) => s.id === cours.idSalle) as Salle)
+                        .numeroSalle
+                    }
+                  </Text>
+
+                  {user.role === "DELEGUE" && (
+                    <TouchableOpacity
+                      style={[
+                        styles.actionButton,
+                        cours.statutCours === EStatutCours.FAIT &&
+                          styles.doneButton,
+                      ]}
+                      onPress={() => handleMarkAsDone(cours.id)}
+                    >
+                      <Text style={styles.actionButtonText}>
+                        {cours.statutCours === EStatutCours.FAIT
+                          ? "Fait ✓"
+                          : "Marquer comme fait"}
+                      </Text>
+                    </TouchableOpacity>
+                  )}
+
+                  {user.role === "ENSEIGNANT" && (
+                    <TouchableOpacity
+                      style={[
+                        styles.actionButton,
+                        cours.disponibiliteProf ===
+                          EDisponibiliteProf.INDISPONIBLE &&
+                          styles.unavailableButton,
+                      ]}
+                      onPress={() => handleToggleDisponibility(cours.id)}
+                    >
+                      <Text style={styles.actionButtonText}>
+                        {cours.disponibiliteProf ===
+                        EDisponibiliteProf.INDISPONIBLE
+                          ? "Indisponible ✗"
+                          : "Disponible ✓"}
+                      </Text>
+                    </TouchableOpacity>
+                  )}
+                </View>
+              </View>
+            ))}
+          </>
+        )}
       </ScrollView>
+
+      {/* Modal de sélection d'EDT */}
+      <Modal
+        visible={showEdtPicker}
+        transparent={true}
+        animationType="slide"
+        onRequestClose={() => setShowEdtPicker(false)}
+      >
+        <View style={styles.modalContainer}>
+          <View style={styles.modalContent}>
+            <Text style={styles.modalTitle}>Choisir un emploi du temps</Text>
+            <ScrollView>
+              {edts.map((edt) => (
+                <Pressable
+                  key={edt.id}
+                  style={styles.edtItem}
+                  onPress={() => handleSelectEdt(edt)}
+                >
+                  <Text style={styles.edtItemText}>{formatEdtTitle(edt)}</Text>
+                  {selectedEdt?.id === edt.id && (
+                    <Text style={styles.edtItemSelected}>✓</Text>
+                  )}
+                </Pressable>
+              ))}
+            </ScrollView>
+            <TouchableOpacity
+              style={styles.closeButton}
+              onPress={() => setShowEdtPicker(false)}
+            >
+              <Text style={styles.closeButtonText}>Fermer</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 };
@@ -181,26 +357,42 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: THEME.background,
   },
+  loadingContainer: {
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  edtSelector: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    padding: 15,
+    backgroundColor: THEME.secondary,
+    margin: 10,
+    borderRadius: 8,
+  },
+  edtSelectorText: {
+    color: THEME.foreground,
+    fontWeight: "bold",
+  },
+  edtSelectorArrow: {
+    color: THEME.mutedForeground,
+  },
   daySelector: {
     backgroundColor: THEME.secondary,
-  },
-  daySelectorContent: {
-    paddingHorizontal: 10,
+    paddingVertical: 10,
   },
   dayButton: {
-    paddingVertical: 15,
     paddingHorizontal: 20,
+    paddingVertical: 10,
     marginHorizontal: 5,
-    borderBottomWidth: 3,
-    borderBottomColor: "transparent",
+    borderRadius: 20,
   },
   selectedDayButton: {
-    borderBottomColor: THEME.primary,
+    backgroundColor: THEME.primary,
   },
   dayButtonText: {
     color: THEME.mutedForeground,
     fontWeight: "500",
-    fontSize: 16,
   },
   selectedDayButtonText: {
     color: THEME.foreground,
@@ -208,7 +400,7 @@ const styles = StyleSheet.create({
   },
   coursesList: {
     flex: 1,
-    padding: 20,
+    padding: 15,
   },
   dateHeader: {
     fontSize: 18,
@@ -233,8 +425,7 @@ const styles = StyleSheet.create({
   courseTimeText: {
     color: THEME.foreground,
     fontWeight: "bold",
-    fontSize: 12,
-    textAlign: "center",
+    fontSize: 14,
   },
   courseDetails: {
     flex: 1,
@@ -249,11 +440,68 @@ const styles = StyleSheet.create({
   courseRoom: {
     color: THEME.primary,
     fontSize: 14,
-    marginBottom: 3,
+    marginBottom: 10,
   },
-  courseProfessor: {
-    color: THEME.mutedForeground,
-    fontSize: 14,
+  actionButton: {
+    padding: 8,
+    borderRadius: 6,
+    backgroundColor: THEME.muted,
+    alignSelf: "flex-start",
+  },
+  doneButton: {
+    backgroundColor: "#4CAF50",
+  },
+  unavailableButton: {
+    backgroundColor: "#F44336",
+  },
+  actionButtonText: {
+    color: THEME.foreground,
+    fontSize: 12,
+    fontWeight: "bold",
+  },
+  modalContainer: {
+    flex: 1,
+    justifyContent: "center",
+    backgroundColor: "rgba(0,0,0,0.5)",
+  },
+  modalContent: {
+    backgroundColor: THEME.background,
+    margin: 20,
+    borderRadius: 10,
+    maxHeight: "80%",
+  },
+  modalTitle: {
+    fontSize: 18,
+    fontWeight: "bold",
+    color: THEME.foreground,
+    padding: 15,
+    borderBottomWidth: 1,
+    borderBottomColor: THEME.border,
+  },
+  edtItem: {
+    padding: 15,
+    borderBottomWidth: 1,
+    borderBottomColor: THEME.border,
+    flexDirection: "row",
+    justifyContent: "space-between",
+  },
+  edtItemText: {
+    color: THEME.foreground,
+  },
+  edtItemSelected: {
+    color: THEME.primary,
+    fontWeight: "bold",
+  },
+  closeButton: {
+    padding: 15,
+    backgroundColor: THEME.primary,
+    borderBottomLeftRadius: 10,
+    borderBottomRightRadius: 10,
+    alignItems: "center",
+  },
+  closeButtonText: {
+    color: THEME.foreground,
+    fontWeight: "bold",
   },
 });
 
