@@ -77,15 +77,8 @@ const LoginScreen = () => {
       setIsLoading(true);
 
       try {
-        // Simuler une connexion à l'API
-        // Remplacez ceci par votre véritable appel API de connexion
         await new Promise((resolve) => setTimeout(resolve, 1000));
-        console.log("Connexion réussie avec:", { email, password });
-        // Simuler un token reçu de votre API
-        const userToken = "fake-auth-token";
-
-        // Connecter l'utilisateur
-        await signIn(userToken);
+        await signIn({ email, password });
       } catch (error) {
         Alert.alert("Erreur", "Échec de la connexion");
         console.error(error);

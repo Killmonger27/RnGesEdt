@@ -35,3 +35,18 @@ export interface AuthResponse {
   statutCompte: "ACTIVE" | "INACTIF" | "BLOQUE" | "EN_ATTENTE";
   roles: string[];
 }
+
+export interface AuthState {
+  id: string | null;
+  nom: string | null;
+  prenom: string | null;
+  type: string | null;
+  email: string | null;
+  statutCompte: string | null;
+  roles: string[] | null;
+  token: string | null;
+  refreshToken: string | null;
+  isAuthenticated: boolean;
+  isLoading: boolean;
+  error: string | null;
+}

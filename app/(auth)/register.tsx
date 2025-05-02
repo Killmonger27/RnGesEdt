@@ -24,6 +24,7 @@ import {
 import { router } from "expo-router";
 import { AuthContext } from "../_layout";
 import { RegisterRequest } from "@/interfaces/Authentification";
+import { register } from "@/services/AuthService";
 
 // Composant pour les sélecteurs
 type SelectFieldProps = {
@@ -267,15 +268,9 @@ const RegisterScreen = () => {
 
       // Simuler une requête API
       try {
-        // Simuler un appel API
-        // Remplacez par votre véritable appel d'API d'inscription
         await new Promise((resolve) => setTimeout(resolve, 1500));
-        console.log("Inscription réussie avec:", formData);
-        // Simuler un token reçu après l'inscription
-        const userToken = "fake-auth-token";
 
-        // Connecter l'utilisateur après l'inscription
-        await signIn(userToken);
+        await register(formData);
       } catch (error) {
         Alert.alert("Erreur", "Échec de l'inscription");
         console.error(error);

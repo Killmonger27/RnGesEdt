@@ -11,9 +11,12 @@ SplashScreen.preventAutoHideAsync();
 
 // Contexte d'authentification
 import { createContext } from "react";
+import { LoginRequest, RegisterRequest } from "@/interfaces/Authentification";
+import { login, register } from "@/services/AuthService";
 interface AuthContextType {
-  signIn: (token: string) => Promise<void>;
+  signIn: (credentials: LoginRequest) => Promise<void>;
   signOut: () => Promise<void>;
+  register: (userData: RegisterRequest) => Promise<void>;
   isLoggedIn: boolean;
 }
 
@@ -72,15 +75,29 @@ export default function RootLayout() {
 
   // Fonctions d'authentification
   const authContext: AuthContextType = {
-    signIn: async (token: string) => {
-      await AsyncStorage.setItem("userToken", token);
+    signIn: async (credentials: LoginRequest) => {
+      const response = await login(credentials.email, credentials.password);
+      console.log("Connexion réussie:", response);
+      await AsyncStorage.setItem("userToken", response.token);
+      await AsyncStorage.setItem("userId", response.id);
+      await AsyncStorage.setItem("refreshToken", response.refreshToken);
       setIsLoggedIn(true);
     },
     signOut: async () => {
       await AsyncStorage.removeItem("userToken");
+      await AsyncStorage.removeItem("userId");
+      await AsyncStorage.removeItem("refreshToken");
       setIsLoggedIn(false);
       // Forcer la redirection vers l'écran de login
       router.replace("/(auth)/login");
+    },
+    register: async (userData: RegisterRequest) => {
+      const response = await register(userData);
+      console.log("Inscription réussie:", response);
+      await AsyncStorage.setItem("userToken", response.token);
+      await AsyncStorage.setItem("userId", response.id);
+      await AsyncStorage.setItem("refreshToken", response.refreshToken);
+      setIsLoggedIn(true);
     },
     isLoggedIn: !!isLoggedIn,
   };
