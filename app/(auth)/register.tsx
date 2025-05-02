@@ -1,4 +1,4 @@
-import React, { useState, useContext } from "react";
+import React, { useState, useContext, useEffect } from "react";
 import {
   View,
   Text,
@@ -25,15 +25,8 @@ import { router } from "expo-router";
 import { AuthContext } from "../_layout";
 import { RegisterRequest } from "@/interfaces/Authentification";
 import { register } from "@/services/AuthService";
-
-// Composant pour les sélecteurs
-type SelectFieldProps = {
-  label: string;
-  selectedValue: string;
-  onValueChange: (value: string) => void;
-  items: Record<string, string>;
-  error?: string;
-};
+import { Filiere } from "@/interfaces/Shared";
+import { getFilieres } from "@/services/FiliereService";
 
 interface FormError {
   nom?: string;
@@ -73,6 +66,14 @@ interface FormError {
   typeAdmin?: string;
 }
 
+interface SelectFieldProps {
+  label: string;
+  selectedValue: string;
+  onValueChange: (value: string) => void;
+  items: Record<string, string> | Array<{ value: string; label: string }>;
+  error?: string;
+}
+
 const SelectField: React.FC<SelectFieldProps> = ({
   label,
   selectedValue,
@@ -82,13 +83,18 @@ const SelectField: React.FC<SelectFieldProps> = ({
 }) => {
   const [modalVisible, setModalVisible] = useState(false);
 
+  // Normalisation des items (supporte les deux formats)
+  const normalizedItems = Array.isArray(items)
+    ? items
+    : Object.entries(items).map(([value, label]) => ({ value, label }));
+
   // Récupérer le label correspondant à la valeur sélectionnée
   const getSelectedLabel = () => {
     if (!selectedValue) return "Sélectionner...";
-    const entry = Object.entries(items).find(
-      ([_, value]) => value === selectedValue
+    const selectedItem = normalizedItems.find(
+      (item) => item.value === selectedValue
     );
-    return entry ? entry[1] : "Sélectionner...";
+    return selectedItem?.label || "Sélectionner...";
   };
 
   return (
@@ -142,19 +148,19 @@ const SelectField: React.FC<SelectFieldProps> = ({
                   <Text style={styles.optionText}>Sélectionner...</Text>
                 </TouchableOpacity>
 
-                {Object.entries(items).map(([key, value]) => (
+                {normalizedItems.map((item) => (
                   <TouchableOpacity
-                    key={key}
+                    key={item.value}
                     style={[
                       styles.optionItem,
-                      selectedValue === value && styles.selectedOption,
+                      selectedValue === item.value && styles.selectedOption,
                     ]}
                     onPress={() => {
-                      onValueChange(value);
+                      onValueChange(item.value);
                       setModalVisible(false);
                     }}
                   >
-                    <Text style={styles.optionText}>{value}</Text>
+                    <Text style={styles.optionText}>{item.label}</Text>
                   </TouchableOpacity>
                 ))}
               </ScrollView>
@@ -177,11 +183,25 @@ const RegisterScreen = () => {
   const [errors, setErrors] = useState<FormError>({} as FormError);
   const [isLoading, setIsLoading] = useState(false);
   const [step, setStep] = useState(1); // Pour navigation par étapes
+  const [filieres, setFilieres] = useState<Filiere[]>([]);
   const authContext = useContext(AuthContext);
   if (!authContext) {
     throw new Error("AuthContext must be used within an AuthProvider");
   }
   const { signIn } = authContext;
+
+  // Récupérer les filières depuis le backend
+  const fetchFilieres = async () => {
+    try {
+      const filieresData = await getFilieres();
+      setFilieres(filieresData);
+    } catch (error) {
+      console.error("Erreur lors de la récupération des filières:", error);
+    }
+  };
+  useEffect(() => {
+    fetchFilieres();
+  }, []);
 
   // Mettre à jour le formulaire
   const updateFormData = (field: keyof typeof formData, value: string) => {
@@ -243,8 +263,6 @@ const RegisterScreen = () => {
         newErrors.lieuResidence = "Le lieu de résidence est obligatoire";
     } else if (formData.role === ROLES.ETUDIANT) {
       if (!formData.ine) newErrors.ine = "Le numéro INE est obligatoire";
-      if (!formData.titreEtudiant)
-        newErrors.titreEtudiant = "Le titre de l'étudiant est obligatoire";
       if (!formData.filiereId)
         newErrors.filiereId = "La filière est obligatoire";
     } else if (formData.role === ROLES.ENSEIGNANT) {
@@ -269,8 +287,8 @@ const RegisterScreen = () => {
       // Simuler une requête API
       try {
         await new Promise((resolve) => setTimeout(resolve, 1500));
-
         await register(formData);
+        router.back();
       } catch (error) {
         Alert.alert("Erreur", "Échec de l'inscription");
         console.error(error);
@@ -321,8 +339,6 @@ const RegisterScreen = () => {
           newErrors.lieuResidence = "Le lieu de résidence est obligatoire";
       } else if (formData.role === ROLES.ETUDIANT) {
         if (!formData.ine) newErrors.ine = "Le numéro INE est obligatoire";
-        if (!formData.titreEtudiant)
-          newErrors.titreEtudiant = "Le titre de l'étudiant est obligatoire";
         if (!formData.filiereId)
           newErrors.filiereId = "La filière est obligatoire";
       } else if (formData.role === ROLES.ENSEIGNANT) {
@@ -382,7 +398,10 @@ const RegisterScreen = () => {
             label="Sexe"
             selectedValue={formData.sexe}
             onValueChange={(value) => updateFormData("sexe", value)}
-            items={SEXE}
+            items={{
+              [SEXE.HOMME]: "Homme",
+              [SEXE.FEMME]: "Femme",
+            }}
             error={errors.sexe}
           />
 
@@ -405,7 +424,11 @@ const RegisterScreen = () => {
             label="Rôle"
             selectedValue={formData.role}
             onValueChange={(value) => updateFormData("role", value)}
-            items={ROLES}
+            items={{
+              [ROLES.ETUDIANT]: "Étudiant",
+              [ROLES.ENSEIGNANT]: "Enseignant",
+              [ROLES.PARENT]: "Parent",
+            }}
             error={errors.role}
           />
 
@@ -415,7 +438,11 @@ const RegisterScreen = () => {
                 label="Type de parent"
                 selectedValue={formData.typeParent || ""}
                 onValueChange={(value) => updateFormData("typeParent", value)}
-                items={TYPE_PARENT}
+                items={{
+                  [TYPE_PARENT.PERE]: "Père",
+                  [TYPE_PARENT.MERE]: "Mère",
+                  [TYPE_PARENT.TUTEUR]: "Tuteur",
+                }}
                 error={errors.typeParent}
               />
 
@@ -442,31 +469,13 @@ const RegisterScreen = () => {
               />
 
               <SelectField
-                label="Titre"
-                selectedValue={formData.titreEtudiant || ""}
-                onValueChange={(value) =>
-                  updateFormData("titreEtudiant", value)
-                }
-                items={TITRE_ETUDIANT}
-                error={errors.titreEtudiant}
-              />
-
-              <InputField
-                label="ID Filière"
-                placeholder="Identifiant de votre filière"
-                value={formData.filiereId || ""}
-                onChangeText={(value) => updateFormData("filiereId", value)}
-                error={errors.filiereId}
-                styles={styles}
-              />
-
-              <InputField
-                label="ID Parent (optionnel)"
-                placeholder="Identifiant du parent"
-                value={formData.parentId || ""}
-                onChangeText={(value) => updateFormData("parentId", value)}
-                error={errors.parentId}
-                styles={styles}
+                label="Filière"
+                selectedValue={formData.filiereId || ""}
+                onValueChange={(value) => updateFormData("filiereId", value)}
+                items={filieres.map((filiere) => ({
+                  value: filiere.id,
+                  label: filiere.nomFiliere + " " + filiere.niveau,
+                }))}
               />
             </>
           )}
@@ -488,7 +497,10 @@ const RegisterScreen = () => {
                 onValueChange={(value) =>
                   updateFormData("typeEnseignant", value)
                 }
-                items={TYPE_ENSEIGNANT}
+                items={{
+                  [TYPE_ENSEIGNANT.PERMANENT]: "Permanent",
+                  [TYPE_ENSEIGNANT.VACATAIRE]: "Vacataire",
+                }}
                 error={errors.typeEnseignant}
               />
 

@@ -21,6 +21,7 @@ import { getFilieres } from "@/services/FiliereService";
 import { getModules } from "@/services/ModuleService";
 import { getSalles } from "@/services/SalleSercice";
 import { Module, Filiere, Salle } from "@/interfaces/Shared";
+import * as Notification from "expo-notifications";
 
 const THEME = {
   background: "#231345",
@@ -44,7 +45,7 @@ const EdtScreen = () => {
     id: "a26f85aa-0777-47cd-9d3c-f206a8e9c9d6",
     filiere: "176c879f-2c01-4e71-9019-8d178c8a50d4",
     filiereId: "MIAGE",
-    role: "DELEGUE", // ou "ENSEIGNANT"
+    role: "ENSEIGNANT", // ou "ENSEIGNANT"
   };
   const [selectedDay, setSelectedDay] = useState<DayInfo | null>(null);
   const [cours, setCours] = useState<Cours[]>([]);
@@ -57,53 +58,47 @@ const EdtScreen = () => {
   const [modules, setModules] = useState<Module[]>([]);
   const [salles, setSalles] = useState<Salle[]>([]);
 
-  useEffect(() => {
-    const fetchPublishedEdts = async () => {
-      try {
-        setLoading(true);
-        const publishedEdts = await getPublishedEdts(user.filiereId);
-        setEdts(publishedEdts);
+  // Fonction pour trouver l'EDT qui couvre la date courante
+  const findCurrentEdt = (edts: Edt[], currentDate: Date): Edt | null => {
+    // Convertir la date courante au format ISO sans l'heure pour la comparaison
+    currentDate.setHours(0, 0, 0, 0);
 
-        if (publishedEdts.length > 0) {
-          // Sélectionner l'EDT courant par défaut
-          handleSelectEdt(publishedEdts[0]);
-        }
-      } catch (error) {
-        Alert.alert("Erreur", "Impossible de charger les emplois du temps");
-      } finally {
-        setLoading(false);
-      }
-    };
+    // Chercher un EDT dont la période couvre la date courante
+    return (
+      edts.find((edt) => {
+        const startDate = new Date(edt.dateDebut);
+        startDate.setHours(0, 0, 0, 0);
 
-    fetchPublishedEdts();
-    const fetchFilieres = async () => {
-      try {
-        const filieresData = await getFilieres();
-        setFilieres(filieresData);
-      } catch (error) {
-        Alert.alert("Erreur", "Impossible de charger les filières");
+        const endDate = new Date(edt.dateFin);
+        endDate.setHours(23, 59, 59, 999); // Fin de journée
+
+        return currentDate >= startDate && currentDate <= endDate;
+      }) || null
+    );
+  };
+
+  // Fonction pour actualiser les données
+  const refreshData = async () => {
+    try {
+      setLoading(true);
+      const publishedEdts = await getPublishedEdts(user.filiereId);
+      setEdts(publishedEdts);
+
+      if (publishedEdts.length > 0) {
+        // Trouver l'EDT qui couvre la date courante
+        const currentDate = new Date();
+        const currentEdt = findCurrentEdt(publishedEdts, currentDate);
+
+        // Si un EDT couvrant la date actuelle est trouvé, le sélectionner
+        // Sinon, prendre le premier EDT publié
+        handleSelectEdt(currentEdt || publishedEdts[0]);
       }
-    };
-    const fetchModules = async () => {
-      try {
-        const modulesData = await getModules();
-        setModules(modulesData);
-      } catch (error) {
-        Alert.alert("Erreur", "Impossible de charger les modules");
-      }
-    };
-    const fetchSalles = async () => {
-      try {
-        const sallesData = await getSalles();
-        setSalles(sallesData);
-      } catch (error) {
-        Alert.alert("Erreur", "Impossible de charger les salles");
-      }
-    };
-    fetchFilieres();
-    fetchModules();
-    fetchSalles();
-  }, []);
+    } catch (error) {
+      Alert.alert("Erreur", "Impossible de charger les emplois du temps");
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const handleSelectEdt = async (edt: Edt) => {
     try {
@@ -161,9 +156,10 @@ const EdtScreen = () => {
         dateOptions
       );
 
-      // Ignorer les week-ends si nécessaire (dimanche=0, samedi=6)
+      // Inclure samedi, ignorer seulement dimanche (dimanche=0, samedi=6)
       const dayOfWeek = currentDate.getDay();
-      if (dayOfWeek !== 0 && dayOfWeek !== 6) {
+      if (dayOfWeek !== 0) {
+        // Inclure tous les jours sauf dimanche
         days.push({
           date: new Date(currentDate),
           dayName,
@@ -243,14 +239,6 @@ const EdtScreen = () => {
 
       return coursDateString === dateString;
     });
-
-    // Si les cours n'ont pas de date dans votre modèle actuel,
-    // vous pouvez temporairement simuler des données comme ceci:
-    // return cours.filter((_, index) => {
-    //   const dayIndex = weekDays.findIndex(d =>
-    //     d.date.getTime() === selectedDay.date.getTime());
-    //   return index % weekDays.length === dayIndex;
-    // });
   };
 
   const formatEdtTitle = (edt: Edt) => {
@@ -258,6 +246,71 @@ const EdtScreen = () => {
       "fr-FR"
     )} au ${new Date(edt.dateFin).toLocaleDateString("fr-FR")}`;
   };
+
+  // Effet pour charger les données au démarrage
+  useEffect(() => {
+    refreshData();
+    const fetchFilieres = async () => {
+      try {
+        const filieresData = await getFilieres();
+        setFilieres(filieresData);
+      } catch (error) {
+        Alert.alert("Erreur", "Impossible de charger les filières");
+      }
+    };
+    const fetchModules = async () => {
+      try {
+        const modulesData = await getModules();
+        setModules(modulesData);
+      } catch (error) {
+        Alert.alert("Erreur", "Impossible de charger les modules");
+      }
+    };
+    const fetchSalles = async () => {
+      try {
+        const sallesData = await getSalles();
+        setSalles(sallesData);
+      } catch (error) {
+        Alert.alert("Erreur", "Impossible de charger les salles");
+      }
+    };
+    fetchFilieres();
+    fetchModules();
+    fetchSalles();
+  }, []);
+
+  // Hook pour vérifier s'il y a un nouvel EDT toutes les minutes
+  useEffect(() => {
+    // Fonction pour vérifier les nouveaux EDT
+    const checkForNewEdts = async () => {
+      try {
+        const freshEdts = await getPublishedEdts(user.filiereId);
+
+        // Si le nombre d'EDT a changé, actualiser l'écran
+        if (freshEdts.length !== edts.length) {
+          refreshData();
+          return;
+        }
+
+        // Vérifier si un nouvel EDT a été publié qui couvre la date actuelle
+        const currentDate = new Date();
+        const currentEdt = findCurrentEdt(freshEdts, currentDate);
+
+        // Si l'EDT courant a changé, actualiser
+        if (currentEdt && (!selectedEdt || currentEdt.id !== selectedEdt.id)) {
+          refreshData();
+        }
+      } catch (error) {
+        console.error("Erreur lors de la vérification des nouveaux EDT", error);
+      }
+    };
+
+    // Vérifier toutes les minutes
+    const interval = setInterval(checkForNewEdts, 60000);
+
+    // Nettoyer l'intervalle quand le composant est démonté
+    return () => clearInterval(interval);
+  }, [edts, selectedEdt]);
 
   if (loading && !selectedEdt) {
     return (
@@ -269,18 +322,24 @@ const EdtScreen = () => {
 
   return (
     <View style={styles.container}>
-      {/* Sélecteur d'EDT */}
-      <TouchableOpacity
-        style={styles.edtSelector}
-        onPress={() => setShowEdtPicker(true)}
-      >
-        <Text style={styles.edtSelectorText}>
-          {selectedEdt
-            ? formatEdtTitle(selectedEdt)
-            : "Choisir un emploi du temps"}
-        </Text>
-        <Text style={styles.edtSelectorArrow}>▼</Text>
-      </TouchableOpacity>
+      {/* Header avec sélecteur d'EDT et bouton de rafraîchissement */}
+      <View style={styles.header}>
+        <TouchableOpacity
+          style={styles.edtSelector}
+          onPress={() => setShowEdtPicker(true)}
+        >
+          <Text style={styles.edtSelectorText}>
+            {selectedEdt
+              ? formatEdtTitle(selectedEdt)
+              : "Choisir un emploi du temps"}
+          </Text>
+          <Text style={styles.edtSelectorArrow}>▼</Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity style={styles.refreshButton} onPress={refreshData}>
+          <Text style={styles.refreshButtonText}>⟳</Text>
+        </TouchableOpacity>
+      </View>
 
       {/* Sélecteur de jour */}
       {selectedEdt && weekDays.length > 0 && (
@@ -458,14 +517,33 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     alignItems: "center",
   },
+  header: {
+    flexDirection: "row",
+    alignItems: "center",
+    margin: 10,
+  },
   edtSelector: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
     padding: 15,
     backgroundColor: THEME.secondary,
-    margin: 10,
     borderRadius: 8,
+    flex: 1,
+  },
+  refreshButton: {
+    backgroundColor: THEME.primary,
+    width: 50,
+    height: 50,
+    borderRadius: 25,
+    justifyContent: "center",
+    alignItems: "center",
+    marginLeft: 10,
+  },
+  refreshButtonText: {
+    color: THEME.foreground,
+    fontSize: 24,
+    fontWeight: "bold",
   },
   edtSelectorText: {
     color: THEME.foreground,

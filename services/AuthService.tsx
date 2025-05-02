@@ -44,6 +44,7 @@ export const login = async (email: string, password: string) => {
 
 export const register = async (userData: RegisterRequest) => {
   try {
+    console.log(userData);
     const response = await axiosInstance.post("/auth/register", userData);
     return response.data;
   } catch (error) {

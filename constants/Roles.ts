@@ -6,8 +6,8 @@ export const ROLES = {
 };
 
 export const SEXE = {
-  HOMME: "HOMME",
-  FEMME: "FEMME",
+  HOMME: "M",
+  FEMME: "F",
 };
 
 export const TYPE_PARENT = {
