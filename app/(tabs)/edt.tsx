@@ -1,4 +1,3 @@
-// EdtScreen.tsx
 import React, { useState, useEffect } from "react";
 import {
   View,
@@ -33,6 +32,13 @@ const THEME = {
   border: "rgba(255, 255, 255, 0.1)",
 };
 
+// Interface pour les jours avec dates réelles
+interface DayInfo {
+  date: Date;
+  dayName: string;
+  formattedDate: string;
+}
+
 const EdtScreen = () => {
   const user = {
     id: "a26f85aa-0777-47cd-9d3c-f206a8e9c9d6",
@@ -40,13 +46,13 @@ const EdtScreen = () => {
     filiereId: "MIAGE",
     role: "DELEGUE", // ou "ENSEIGNANT"
   };
-  const [selectedDay, setSelectedDay] = useState<string>("");
+  const [selectedDay, setSelectedDay] = useState<DayInfo | null>(null);
   const [cours, setCours] = useState<Cours[]>([]);
   const [loading, setLoading] = useState(true);
   const [edts, setEdts] = useState<Edt[]>([]);
   const [selectedEdt, setSelectedEdt] = useState<Edt | null>(null);
   const [showEdtPicker, setShowEdtPicker] = useState(false);
-  const [weekDays, setWeekDays] = useState<string[]>([]);
+  const [weekDays, setWeekDays] = useState<DayInfo[]>([]);
   const [filieres, setFilieres] = useState<Filiere[]>([]);
   const [modules, setModules] = useState<Module[]>([]);
   const [salles, setSalles] = useState<Salle[]>([]);
@@ -105,15 +111,17 @@ const EdtScreen = () => {
       setSelectedEdt(edt);
       setShowEdtPicker(false);
 
-      // Générer les jours de la semaine
-      generateWeekDays(edt.dateDebut, edt.dateFin);
+      // Générer les jours de la semaine avec les dates réelles
+      const days = generateWeekDays(edt.dateDebut, edt.dateFin);
+      setWeekDays(days);
 
       // Récupérer les cours pour cet EDT
       const coursData = await getCoursByEdt(edt.id, user.filiereId);
       setCours(coursData);
 
-      // Sélectionner le jour actuel par défaut
-      setSelectedDay(getCurrentWeekday());
+      // Sélectionner le jour actuel par défaut ou le premier jour de l'EDT
+      const currentDay = findCurrentDay(days);
+      setSelectedDay(currentDay || days[0]);
     } catch (error) {
       Alert.alert("Erreur", "Impossible de charger les cours");
     } finally {
@@ -121,15 +129,14 @@ const EdtScreen = () => {
     }
   };
 
-  const generateWeekDays = (startDate: string, endDate: string) => {
-    // Simplification pour l'exemple - dans une vraie app, utilisez les dates réelles
-    const days = ["Lundi", "Mardi", "Mercredi", "Jeudi", "Vendredi"];
-    setWeekDays(days);
-  };
+  // Génère les jours de la semaine à partir des dates réelles de l'EDT
+  const generateWeekDays = (startDate: string, endDate: string): DayInfo[] => {
+    const start = new Date(startDate);
+    const end = new Date(endDate);
+    const days: DayInfo[] = [];
 
-  const getCurrentWeekday = () => {
-    const today = new Date().getDay();
-    const weekdays = [
+    // Format français des jours
+    const dayNames = [
       "Dimanche",
       "Lundi",
       "Mardi",
@@ -138,7 +145,51 @@ const EdtScreen = () => {
       "Vendredi",
       "Samedi",
     ];
-    return weekdays[today];
+
+    // Options de formatage de date pour l'affichage
+    const dateOptions: Intl.DateTimeFormatOptions = {
+      day: "2-digit",
+      month: "2-digit",
+    };
+
+    // Créer un tableau de jours entre la date de début et la date de fin
+    const currentDate = new Date(start);
+    while (currentDate <= end) {
+      const dayName = dayNames[currentDate.getDay()];
+      const formattedDate = currentDate.toLocaleDateString(
+        "fr-FR",
+        dateOptions
+      );
+
+      // Ignorer les week-ends si nécessaire (dimanche=0, samedi=6)
+      const dayOfWeek = currentDate.getDay();
+      if (dayOfWeek !== 0 && dayOfWeek !== 6) {
+        days.push({
+          date: new Date(currentDate),
+          dayName,
+          formattedDate,
+        });
+      }
+
+      // Passer au jour suivant
+      currentDate.setDate(currentDate.getDate() + 1);
+    }
+
+    return days;
+  };
+
+  // Trouver le jour courant dans la liste des jours de la semaine
+  const findCurrentDay = (days: DayInfo[]): DayInfo | null => {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    return (
+      days.find((day) => {
+        const date = new Date(day.date);
+        date.setHours(0, 0, 0, 0);
+        return date.getTime() === today.getTime();
+      }) || null
+    );
   };
 
   const handleMarkAsDone = async (coursId: string) => {
@@ -173,19 +224,39 @@ const EdtScreen = () => {
     }
   };
 
-  const getCoursForDay = (day: string) => {
-    // Dans une vraie implémentation, vous filtreriez par date réelle
-    // Pour l'exemple, nous simulons des données par jour
-    return cours.filter((_, index) => {
-      const dayIndex = weekDays.indexOf(day);
-      return index % weekDays.length === dayIndex;
+  // Filtrer les cours pour le jour sélectionné en utilisant les dates réelles
+  const getCoursForDay = (selectedDay: DayInfo | null) => {
+    if (!selectedDay) return [];
+
+    // Convertir la date sélectionnée en format ISO sans l'heure pour la comparaison
+    const selectedDate = new Date(selectedDay.date);
+    selectedDate.setHours(0, 0, 0, 0);
+    const dateString = selectedDate.toISOString().split("T")[0];
+
+    // Filtrer les cours par date
+    return cours.filter((cours) => {
+      // Supposons que chaque cours a une propriété date (à ajuster selon votre modèle de données)
+      // Si ce n'est pas le cas, vous devrez adapter cette logique
+      const coursDate = new Date(cours.date || "");
+      coursDate.setHours(0, 0, 0, 0);
+      const coursDateString = coursDate.toISOString().split("T")[0];
+
+      return coursDateString === dateString;
     });
+
+    // Si les cours n'ont pas de date dans votre modèle actuel,
+    // vous pouvez temporairement simuler des données comme ceci:
+    // return cours.filter((_, index) => {
+    //   const dayIndex = weekDays.findIndex(d =>
+    //     d.date.getTime() === selectedDay.date.getTime());
+    //   return index % weekDays.length === dayIndex;
+    // });
   };
 
   const formatEdtTitle = (edt: Edt) => {
-    return `Emploi du temps du ${new Date(
-      edt.dateDebut
-    ).toLocaleDateString()} au ${new Date(edt.dateFin).toLocaleDateString()}`;
+    return `Emploi du temps du ${new Date(edt.dateDebut).toLocaleDateString(
+      "fr-FR"
+    )} au ${new Date(edt.dateFin).toLocaleDateString("fr-FR")}`;
   };
 
   if (loading && !selectedEdt) {
@@ -212,7 +283,7 @@ const EdtScreen = () => {
       </TouchableOpacity>
 
       {/* Sélecteur de jour */}
-      {selectedEdt && (
+      {selectedEdt && weekDays.length > 0 && (
         <ScrollView
           horizontal
           showsHorizontalScrollIndicator={false}
@@ -220,20 +291,31 @@ const EdtScreen = () => {
         >
           {weekDays.map((day) => (
             <TouchableOpacity
-              key={day}
+              key={day.formattedDate}
               style={[
                 styles.dayButton,
-                selectedDay === day && styles.selectedDayButton,
+                selectedDay?.formattedDate === day.formattedDate &&
+                  styles.selectedDayButton,
               ]}
               onPress={() => setSelectedDay(day)}
             >
               <Text
                 style={[
                   styles.dayButtonText,
-                  selectedDay === day && styles.selectedDayButtonText,
+                  selectedDay?.formattedDate === day.formattedDate &&
+                    styles.selectedDayButtonText,
                 ]}
               >
-                {day}
+                {day.dayName}
+              </Text>
+              <Text
+                style={[
+                  styles.dayDateText,
+                  selectedDay?.formattedDate === day.formattedDate &&
+                    styles.selectedDayButtonText,
+                ]}
+              >
+                {day.formattedDate}
               </Text>
             </TouchableOpacity>
           ))}
@@ -242,75 +324,90 @@ const EdtScreen = () => {
 
       {/* Liste des cours */}
       <ScrollView style={styles.coursesList}>
-        {selectedEdt && (
+        {selectedEdt && selectedDay && (
           <>
             <Text style={styles.dateHeader}>
-              {selectedDay} -{" "}
-              {(filieres.find((f) => f.id === user.filiere) as Filiere)
-                .nomFiliere +
-                " " +
-                (filieres.find((f) => f.id === user.filiere) as Filiere).niveau}
+              {selectedDay.dayName} {selectedDay.formattedDate} -{" "}
+              {filieres.length > 0 &&
+                user.filiere &&
+                ((filieres.find((f) => f.id === user.filiere) as Filiere) || {})
+                  ?.nomFiliere +
+                  " " +
+                  (
+                    (filieres.find((f) => f.id === user.filiere) as Filiere) ||
+                    {}
+                  )?.niveau}
             </Text>
 
-            {getCoursForDay(selectedDay).map((cours) => (
-              <View key={cours.id} style={styles.courseCard}>
-                <View style={styles.courseTime}>
-                  <Text style={styles.courseTimeText}>{cours.crenau}</Text>
-                </View>
-                <View style={styles.courseDetails}>
-                  <Text style={styles.courseName}>
-                    Intitulé :{" "}
-                    {
-                      (modules.find((m) => m.id === cours.idMatiere) as Module)
-                        .intitule
-                    }
-                  </Text>
-                  <Text style={styles.courseRoom}>
-                    Salle :{" "}
-                    {
-                      (salles.find((s) => s.id === cours.idSalle) as Salle)
-                        .numeroSalle
-                    }
-                  </Text>
+            {getCoursForDay(selectedDay).length > 0 ? (
+              getCoursForDay(selectedDay).map((cours) => (
+                <View key={cours.id} style={styles.courseCard}>
+                  <View style={styles.courseTime}>
+                    <Text style={styles.courseTimeText}>{cours.crenau}</Text>
+                  </View>
+                  <View style={styles.courseDetails}>
+                    <Text style={styles.courseName}>
+                      Intitulé :{" "}
+                      {modules.length > 0 &&
+                        (
+                          (modules.find(
+                            (m) => m.id === cours.idMatiere
+                          ) as Module) || {}
+                        )?.intitule}
+                    </Text>
+                    <Text style={styles.courseRoom}>
+                      Salle :{" "}
+                      {salles.length > 0 &&
+                        (
+                          (salles.find(
+                            (s) => s.id === cours.idSalle
+                          ) as Salle) || {}
+                        )?.numeroSalle}
+                    </Text>
 
-                  {user.role === "DELEGUE" && (
-                    <TouchableOpacity
-                      style={[
-                        styles.actionButton,
-                        cours.statutCours === EStatutCours.FAIT &&
-                          styles.doneButton,
-                      ]}
-                      onPress={() => handleMarkAsDone(cours.id)}
-                    >
-                      <Text style={styles.actionButtonText}>
-                        {cours.statutCours === EStatutCours.FAIT
-                          ? "Fait ✓"
-                          : "Marquer comme fait"}
-                      </Text>
-                    </TouchableOpacity>
-                  )}
+                    {user.role === "DELEGUE" && (
+                      <TouchableOpacity
+                        style={[
+                          styles.actionButton,
+                          cours.statutCours === EStatutCours.FAIT &&
+                            styles.doneButton,
+                        ]}
+                        onPress={() => handleMarkAsDone(cours.id)}
+                      >
+                        <Text style={styles.actionButtonText}>
+                          {cours.statutCours === EStatutCours.FAIT
+                            ? "Fait ✓"
+                            : "Marquer comme fait"}
+                        </Text>
+                      </TouchableOpacity>
+                    )}
 
-                  {user.role === "ENSEIGNANT" && (
-                    <TouchableOpacity
-                      style={[
-                        styles.actionButton,
-                        cours.disponibiliteProf ===
-                          EDisponibiliteProf.INDISPONIBLE &&
-                          styles.unavailableButton,
-                      ]}
-                      onPress={() => handleToggleDisponibility(cours.id)}
-                    >
-                      <Text style={styles.actionButtonText}>
-                        {cours.disponibiliteProf ===
-                        EDisponibiliteProf.INDISPONIBLE
-                          ? "Indisponible ✗"
-                          : "Disponible ✓"}
-                      </Text>
-                    </TouchableOpacity>
-                  )}
+                    {user.role === "ENSEIGNANT" && (
+                      <TouchableOpacity
+                        style={[
+                          styles.actionButton,
+                          cours.disponibiliteProf ===
+                            EDisponibiliteProf.INDISPONIBLE &&
+                            styles.unavailableButton,
+                        ]}
+                        onPress={() => handleToggleDisponibility(cours.id)}
+                      >
+                        <Text style={styles.actionButtonText}>
+                          {cours.disponibiliteProf ===
+                          EDisponibiliteProf.INDISPONIBLE
+                            ? "Indisponible ✗"
+                            : "Disponible ✓"}
+                        </Text>
+                      </TouchableOpacity>
+                    )}
+                  </View>
                 </View>
-              </View>
-            ))}
+              ))
+            ) : (
+              <Text style={styles.noCoursText}>
+                Aucun cours prévu pour cette journée
+              </Text>
+            )}
           </>
         )}
       </ScrollView>
@@ -386,6 +483,7 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     marginHorizontal: 5,
     borderRadius: 20,
+    alignItems: "center",
   },
   selectedDayButton: {
     backgroundColor: THEME.primary,
@@ -393,6 +491,11 @@ const styles = StyleSheet.create({
   dayButtonText: {
     color: THEME.mutedForeground,
     fontWeight: "500",
+  },
+  dayDateText: {
+    color: THEME.mutedForeground,
+    fontSize: 12,
+    marginTop: 3,
   },
   selectedDayButtonText: {
     color: THEME.foreground,
@@ -502,6 +605,12 @@ const styles = StyleSheet.create({
   closeButtonText: {
     color: THEME.foreground,
     fontWeight: "bold",
+  },
+  noCoursText: {
+    color: THEME.mutedForeground,
+    textAlign: "center",
+    marginTop: 30,
+    fontSize: 16,
   },
 });
 
