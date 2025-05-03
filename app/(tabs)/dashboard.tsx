@@ -19,7 +19,9 @@ import { getFilieres } from "@/services/FiliereService";
 import { getModules } from "@/services/ModuleService";
 import { getSalles } from "@/services/SalleSercice";
 import { Cours, EStatutCours, EDisponibiliteProf, Edt } from "@/interfaces/EDT";
-import { Module, Filiere, Salle } from "@/interfaces/Shared";
+import { Module, Filiere, Salle, UserData } from "@/interfaces/Shared";
+import { useAppSelector } from "@/hooks/Redux";
+import { getUserFiliere, getUserProfile } from "@/services/UserService";
 
 // Thème
 const THEME = {
@@ -33,14 +35,20 @@ const THEME = {
 };
 
 const DashboardScreen = () => {
-  const user = {
-    id: "a26f85aa-0777-47cd-9d3c-f206a8e9c9d6",
-    filiere: "176c879f-2c01-4e71-9019-8d178c8a50d4",
-    filiereId: "MIAGE",
-    role: "ENSEIGNANT", // ou "ENSEIGNANT"
-  };
+  // État pour stocker les informations de l'utilisateur
+  const [user, setUser] = useState({
+    id: "",
+    nom: "",
+    prenom: "",
+    filiereId: "",
+    filiereName: "",
+    role: "",
+    filiereFR: "",
+    typeUser: "",
+  });
 
   const [loading, setLoading] = useState(true);
+  const [userLoaded, setUserLoaded] = useState(false); // Nouvel état pour suivre le chargement de l'utilisateur
   const [currentEdt, setCurrentEdt] = useState<Edt | null>(null);
   const [todayCourses, setTodayCourses] = useState<Cours[]>([]);
   const [upcomingCourses, setUpcomingCourses] = useState<Cours[]>([]);
@@ -48,6 +56,38 @@ const DashboardScreen = () => {
   const [salles, setSalles] = useState<Salle[]>([]);
   const [filieres, setFilieres] = useState<Filiere[]>([]);
   const [pendingAssignments, setPendingAssignments] = useState(0);
+
+  // Obtenir l'utilisateur connecté
+  const userId = useAppSelector((state) => state.auth.userId);
+
+  // Obtenir les informations de l'utilisateur
+  async function fetchUserInfos() {
+    try {
+      const response = await getUserProfile();
+      setUser({
+        id: response.id,
+        nom: response.nom,
+        prenom: response.prenom,
+        filiereId: response.filiere.id,
+        filiereName:
+          response.filiere.nomFiliere + " " + response.filiere.niveau,
+        role: response.role,
+        filiereFR: response.filiere.nomFiliere,
+        typeUser: response.titreEtudiant,
+      });
+      setUserLoaded(true); // Marquer l'utilisateur comme chargé
+      console.log("User loaded:", response);
+    } catch (error) {
+      console.error(
+        "Erreur lors de la récupération des informations utilisateur:",
+        error
+      );
+      Alert.alert(
+        "Erreur",
+        "Impossible de récupérer les informations utilisateur"
+      );
+    }
+  }
 
   // Format français des jours
   const dayNames = [
@@ -201,7 +241,7 @@ const DashboardScreen = () => {
     }
   };
 
-  // Fonction pour charger les données initiales
+  // Fonction pour charger les données initiales (après avoir chargé l'utilisateur)
   const loadData = async () => {
     try {
       setLoading(true);
@@ -209,7 +249,7 @@ const DashboardScreen = () => {
       // Charger toutes les données nécessaires en parallèle
       const [edtsData, filieresData, modulesData, sallesData] =
         await Promise.all([
-          getPublishedEdts(user.filiereId),
+          getPublishedEdts(user.filiereFR),
           getFilieres(),
           getModules(),
           getSalles(),
@@ -224,7 +264,7 @@ const DashboardScreen = () => {
         setCurrentEdt(edt);
 
         // Charger les cours pour cet EDT
-        const coursData = await getCoursByEdt(edt.id, user.filiereId);
+        const coursData = await getCoursByEdt(edt.id, user.filiereName);
 
         // Filtrer les cours pour aujourd'hui et les prochains cours
         const todayCoursesData = filterTodayCourses(coursData);
@@ -244,10 +284,17 @@ const DashboardScreen = () => {
     }
   };
 
-  // Effet pour charger les données au démarrage
+  // Effet pour charger les informations utilisateur au démarrage
   useEffect(() => {
-    loadData();
+    fetchUserInfos();
   }, []);
+
+  // Effet pour charger les données une fois que l'utilisateur est chargé
+  useEffect(() => {
+    if (userLoaded) {
+      loadData();
+    }
+  }, [userLoaded]);
 
   // Format de la date du jour
   const formattedDate = new Date().toLocaleDateString("fr-FR", {
@@ -258,16 +305,16 @@ const DashboardScreen = () => {
 
   // Obtenir le nom de la filière actuelle
   const getCurrentFiliereName = () => {
-    if (filieres.length > 0 && user.filiere) {
-      const filiere = filieres.find((f) => f.id === user.filiere);
+    if (filieres.length > 0 && user.filiereId) {
+      const filiere = filieres.find((f) => f.id === user.filiereId);
       if (filiere) {
         return `${filiere.nomFiliere} ${filiere.niveau}`;
       }
     }
-    return "";
+    return user.filiereName || "";
   };
 
-  if (loading) {
+  if (loading || !userLoaded) {
     return (
       <View style={[styles.container, styles.loadingContainer]}>
         <ActivityIndicator size="large" color={THEME.primary} />
@@ -279,7 +326,7 @@ const DashboardScreen = () => {
     <ScrollView style={styles.container}>
       <View style={styles.header}>
         <Text style={styles.welcomeText}>
-          Bonjour, {user.role === "DELEGUE" ? "Délégué" : "Enseignant"}
+          Bonjour, {user.prenom} {user.nom}
         </Text>
         <Text style={styles.dateText}>{formattedDate}</Text>
         <Text style={styles.filiereText}>{getCurrentFiliereName()}</Text>
@@ -290,7 +337,7 @@ const DashboardScreen = () => {
           <Text style={styles.statNumber}>{todayCourses.length}</Text>
           <Text style={styles.statLabel}>Cours aujourd'hui</Text>
         </View>
-        {user.role === "DELEGUE" ? (
+        {user.typeUser === "ETUDIANT_DELEGE" ? (
           <View style={styles.statCard}>
             <Text style={styles.statNumber}>{pendingAssignments}</Text>
             <Text style={styles.statLabel}>Devoirs à rendre</Text>
@@ -336,7 +383,7 @@ const DashboardScreen = () => {
                     Salle {salleInfo ? salleInfo.numeroSalle : "N/A"}
                   </Text>
 
-                  {user.role === "DELEGUE" && (
+                  {user.typeUser === "ETUDIANT_DELEGE" && (
                     <TouchableOpacity
                       style={[
                         styles.actionButton,

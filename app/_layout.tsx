@@ -2,64 +2,52 @@ import { useEffect, useState } from "react";
 import { Stack } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import * as SplashScreen from "expo-splash-screen";
-import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useRouter, useSegments } from "expo-router";
 import { View } from "react-native";
+import { Provider } from "react-redux";
+import { PersistGate } from "redux-persist/integration/react";
+import { store, persistor } from "@/redux/Store";
+import { useAppDispatch, useAppSelector } from "@/hooks/Redux";
+import { checkAuth } from "@/redux/Authslice";
 
 // Maintenir le splash screen visible pendant que nous vérifions l'authentification
 SplashScreen.preventAutoHideAsync();
 
-// Contexte d'authentification
-import { createContext } from "react";
-import { LoginRequest, RegisterRequest } from "@/interfaces/Authentification";
-import { login, register } from "@/services/AuthService";
-interface AuthContextType {
-  signIn: (credentials: LoginRequest) => Promise<void>;
-  signOut: () => Promise<void>;
-  register: (userData: RegisterRequest) => Promise<void>;
-  isLoggedIn: boolean;
-}
-
-export const AuthContext = createContext<AuthContextType | null>(null);
-
-export default function RootLayout() {
-  const [isLoggedIn, setIsLoggedIn] = useState<boolean | null>(null);
-  const [appIsReady, setAppIsReady] = useState(false);
+// Composant de redirection en fonction de l'état d'authentification
+function AuthenticationGuard() {
+  const { isLoggedIn } = useAppSelector((state) => state.auth);
   const router = useRouter();
   const segments = useSegments();
+  const dispatch = useAppDispatch();
+  const [appIsReady, setAppIsReady] = useState(false);
 
-  // Vérifier l'état d'authentification
+  // Vérifier l'état d'authentification au chargement
   useEffect(() => {
     async function prepare() {
       try {
-        // Récupérer le token depuis AsyncStorage
-        const token = await AsyncStorage.getItem("userToken");
-
-        // Mettre à jour l'état d'authentification
-        setIsLoggedIn(!!token);
+        await dispatch(checkAuth()).unwrap();
       } catch (error) {
-        console.error("Erreur lors de la vérification du token:", error);
-        setIsLoggedIn(false);
+        console.error(
+          "Erreur lors de la vérification de l'authentification:",
+          error
+        );
       } finally {
-        // Marquer l'app comme prête
         setAppIsReady(true);
       }
     }
 
     prepare();
-  }, []);
+  }, [dispatch]);
 
-  // Effet pour cacher le splash screen natif
   useEffect(() => {
     if (appIsReady) {
-      // Cacher le splash screen natif d'Expo
       SplashScreen.hideAsync();
     }
   }, [appIsReady]);
 
   // Effet pour rediriger en fonction de l'état d'authentification
   useEffect(() => {
-    if (!appIsReady || isLoggedIn === null) return;
+    if (!appIsReady) return;
 
     const inAuthGroup = segments[0] === "(auth)";
     const inTabsGroup = segments[0] === "(tabs)";
@@ -73,54 +61,31 @@ export default function RootLayout() {
     }
   }, [isLoggedIn, segments, router, appIsReady]);
 
-  // Fonctions d'authentification
-  const authContext: AuthContextType = {
-    signIn: async (credentials: LoginRequest) => {
-      const response = await login(credentials.email, credentials.password);
-      console.log("Connexion réussie:", response);
-      await AsyncStorage.setItem("userToken", response.token);
-      await AsyncStorage.setItem("userId", response.id);
-      await AsyncStorage.setItem("refreshToken", response.refreshToken);
-      setIsLoggedIn(true);
-    },
-    signOut: async () => {
-      await AsyncStorage.removeItem("userToken");
-      await AsyncStorage.removeItem("userId");
-      await AsyncStorage.removeItem("refreshToken");
-      setIsLoggedIn(false);
-      // Forcer la redirection vers l'écran de login
-      router.replace("/(auth)/login");
-    },
-    register: async (userData: RegisterRequest) => {
-      const response = await register(userData);
-      console.log("Inscription réussie:", response);
-      await AsyncStorage.setItem("userToken", response.token);
-      await AsyncStorage.setItem("userId", response.id);
-      await AsyncStorage.setItem("refreshToken", response.refreshToken);
-      setIsLoggedIn(true);
-    },
-    isLoggedIn: !!isLoggedIn,
-  };
-
   // Si l'app n'est pas prête, afficher un écran vide pour garder le splash screen natif visible
   if (!appIsReady) {
     return <View style={{ flex: 1, backgroundColor: "#231345" }} />;
   }
 
-  // Affichage normal de l'app
+  return null;
+}
+
+export default function RootLayout() {
   return (
-    <AuthContext.Provider value={authContext}>
-      <StatusBar style="light" />
-      <Stack
-        screenOptions={{
-          headerShown: false,
-          animation: "fade",
-          contentStyle: { backgroundColor: "#231345" },
-        }}
-      >
-        <Stack.Screen name="(auth)" options={{ headerShown: false }} />
-        <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-      </Stack>
-    </AuthContext.Provider>
+    <Provider store={store}>
+      <PersistGate loading={null} persistor={persistor}>
+        <AuthenticationGuard />
+        <StatusBar style="light" />
+        <Stack
+          screenOptions={{
+            headerShown: false,
+            animation: "fade",
+            contentStyle: { backgroundColor: "#231345" },
+          }}
+        >
+          <Stack.Screen name="(auth)" options={{ headerShown: false }} />
+          <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+        </Stack>
+      </PersistGate>
+    </Provider>
   );
 }

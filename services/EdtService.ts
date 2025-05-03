@@ -3,10 +3,10 @@ import axiosInstance from "./AuthService";
 import { Edt } from "@/interfaces/EDT";
 
 // Fonction pour récupérer les EDT d'un filière
-export const getPublishedEdts = async (filiereId: string): Promise<Edt[]> => {
+export const getPublishedEdts = async (filiereName: string): Promise<Edt[]> => {
   try {
     const response = await axiosInstance.get<Edt[]>(
-      `/edt?recherche=${filiereId}`
+      `/edt?recherche=${filiereName}`
     );
     return response.data;
   } catch (error) {

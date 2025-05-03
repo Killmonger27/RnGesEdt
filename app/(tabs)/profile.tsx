@@ -11,7 +11,8 @@ import {
 import { Ionicons } from "@expo/vector-icons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useRouter } from "expo-router";
-import { AuthContext } from "../_layout"; // Assurez-vous que le chemin est correct
+import { useAppDispatch } from "@/hooks/Redux";
+import { signOut } from "@/redux/Authslice";
 
 // Thème
 const THEME = {
@@ -37,17 +38,11 @@ const ProfileScreen = () => {
     degree: "Licence",
   };
   const router = useRouter();
-  const context = useContext(AuthContext);
-  if (!context) {
-    throw new Error("AuthContext is not available");
-  }
-  const { signOut } = context;
+  const dispatch = useAppDispatch();
 
   const handleLogout = () => {
-    // Déconnexion
-    // Ici, vous pouvez ajouter la logique de déconnexion, comme effacer le token d'authentification
     console.log("Déconnexion");
-    signOut();
+    dispatch(signOut()).unwrap();
   };
 
   return (

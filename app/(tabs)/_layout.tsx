@@ -1,10 +1,9 @@
-// app/(tabs)/_layout.js
 import React from "react";
 import { Tabs } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
-import { useContext } from "react";
 import { TouchableOpacity } from "react-native";
-import { AuthContext } from "../_layout";
+import { signOut } from "@/redux/Authslice";
+import { useAppDispatch } from "@/hooks/Redux";
 
 // Thème
 const THEME = {
@@ -19,12 +18,7 @@ const THEME = {
 };
 
 export default function TabsLayout() {
-  const context = useContext(AuthContext);
-  if (!context) {
-    throw new Error("TabsLayout must be used within an AuthProvider");
-  }
-
-  const { signOut } = context;
+  const dispatch = useAppDispatch();
 
   return (
     <Tabs
@@ -71,7 +65,10 @@ export default function TabsLayout() {
         headerTitleAlign: "center",
         // Ajout d'un bouton de déconnexion dans l'en-tête
         headerRight: () => (
-          <TouchableOpacity onPress={signOut} style={{ marginRight: 16 }}>
+          <TouchableOpacity
+            onPress={() => dispatch(signOut())}
+            style={{ marginRight: 16 }}
+          >
             <Ionicons
               name="log-out-outline"
               size={24}

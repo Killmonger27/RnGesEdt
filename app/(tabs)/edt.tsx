@@ -45,7 +45,7 @@ const EdtScreen = () => {
     id: "a26f85aa-0777-47cd-9d3c-f206a8e9c9d6",
     filiere: "176c879f-2c01-4e71-9019-8d178c8a50d4",
     filiereId: "MIAGE",
-    role: "ENSEIGNANT", // ou "ENSEIGNANT"
+    role: "DELEGUE", // ou "ENSEIGNANT"
   };
   const [selectedDay, setSelectedDay] = useState<DayInfo | null>(null);
   const [cours, setCours] = useState<Cours[]>([]);

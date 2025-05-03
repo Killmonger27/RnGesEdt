@@ -20,3 +20,10 @@ export interface Salle {
   numeroSalle: string;
   disponibiliteSalle: "LIBRE" | "OCCUPEE";
 }
+
+export interface UserData {
+  id: string;
+  filiereId: string;
+  filiereName: string;
+  role: string;
+}

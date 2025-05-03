@@ -14,7 +14,8 @@ import {
 } from "react-native";
 import { THEME } from "@/constants/Colors";
 import { InputField } from "@/components/input-field";
-import { AuthContext } from "../_layout";
+import { useAppDispatch, useAppSelector } from "@/hooks/Redux";
+import { signIn } from "@/redux/Authslice";
 
 // Composant pour les boutons de connexion sociale
 const SocialButton: React.FC<{
@@ -46,13 +47,7 @@ const LoginScreen = () => {
   const [password, setPassword] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [errors, setErrors] = useState<CredentialsError>({});
-  const authContext = useContext(AuthContext);
-
-  if (!authContext) {
-    throw new Error("AuthContext must be used within an AuthProvider");
-  }
-
-  const { signIn } = authContext;
+  const dispatch = useAppDispatch();
 
   // Fonction de validation simple
   const validate = () => {
@@ -78,7 +73,7 @@ const LoginScreen = () => {
 
       try {
         await new Promise((resolve) => setTimeout(resolve, 1000));
-        await signIn({ email, password });
+        await dispatch(signIn({ email, password })).unwrap();
       } catch (error) {
         Alert.alert("Erreur", "Échec de la connexion");
         console.error(error);

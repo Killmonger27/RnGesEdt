@@ -22,11 +22,11 @@ import {
   TYPE_ENSEIGNANT,
 } from "@/constants/Roles";
 import { router } from "expo-router";
-import { AuthContext } from "../_layout";
 import { RegisterRequest } from "@/interfaces/Authentification";
-import { register } from "@/services/AuthService";
 import { Filiere } from "@/interfaces/Shared";
 import { getFilieres } from "@/services/FiliereService";
+import { useAppDispatch } from "@/hooks/Redux";
+import { signUp } from "@/redux/Authslice";
 
 interface FormError {
   nom?: string;
@@ -184,11 +184,7 @@ const RegisterScreen = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [step, setStep] = useState(1); // Pour navigation par étapes
   const [filieres, setFilieres] = useState<Filiere[]>([]);
-  const authContext = useContext(AuthContext);
-  if (!authContext) {
-    throw new Error("AuthContext must be used within an AuthProvider");
-  }
-  const { signIn } = authContext;
+  const dispatch = useAppDispatch();
 
   // Récupérer les filières depuis le backend
   const fetchFilieres = async () => {
@@ -287,7 +283,7 @@ const RegisterScreen = () => {
       // Simuler une requête API
       try {
         await new Promise((resolve) => setTimeout(resolve, 1500));
-        await register(formData);
+        await dispatch(signUp(formData)).unwrap();
         router.back();
       } catch (error) {
         Alert.alert("Erreur", "Échec de l'inscription");
